@@ -17,14 +17,16 @@
 - Space: run GrabCut iteration, after painting some FG/BG
 - LEFT CLICK: Paint FG
 - RIGHT CLICK: Paint BG
-- CTRL+LEFT CLICK: Paint maybe FG
-- CTRL+RIGHT CLICK: Paint maybe BG;
+- CTRL+LEFT CLICK: Paint 'maybe FG'
+- CTRL+RIGHT CLICK: Paint 'maybe BG'
+- SHIFT+LEFT CLICK: Erase brushstroke
 
 - S: Save mask to overwrite original mask image (original backed up to 
 *_mask_orig.png)
 - R: Reset GrabCut
-- T: Clear current active strokes (does not modify actual mask)
+- C: Reset zoom/pan
+- U: Clear current active brushstrokes (basic undo)
 - =/-: Increase/decrease brush size
-- u/i/o/p: Blend/image/masked image/binary mask views
+- 1-4: Blend/image/masked image/binary mask views
 - MIDDLE CLICK + Drag: Pan
 - CTRL+MIDDLE CLICK + Drag vertically: Zoom
