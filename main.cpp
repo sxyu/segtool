@@ -247,7 +247,7 @@ void GrabCut::mouseEvent(int event, int x, int y, int flags, void*) {
                     transformView(rate);
                 } else if (flags & EVENT_FLAG_SHIFTKEY) {
                     radius += (int)((mousePos.y - y) / 2.f);
-                    radius = std::max(1, radius);
+                    radius = std::max(0, radius);
                 } else {
                     float scale = std::min((float)size.width / view.width,
                                            (float)size.height / view.height);
@@ -329,7 +329,7 @@ void runGrabCut(cv::Mat im, cv::Mat mask, const std::string& save_path,
                 app.radius++;
                 break;
             case '-':
-                if (app.radius > 1) app.radius--;
+                if (app.radius > 0) app.radius--;
                 break;
             case ' ': {
                 app.nextIter();
