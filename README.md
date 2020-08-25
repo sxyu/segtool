@@ -30,3 +30,4 @@
 - 1-4: Blend/image/masked image/binary mask views
 - MIDDLE CLICK + Drag: Pan
 - CTRL+MIDDLE CLICK + Drag vertically: Zoom
+- SHIFT+MIDDLE CLICK + Drag vertically: Change brush size

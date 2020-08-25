@@ -43,7 +43,8 @@ void help() {
             "=/-: Increase/decrease brush size\n\n"
             "1-4: Blend/image/masked image/binary mask views\n\n"
             "MIDDLE CLICK + Drag: Pan\n"
-            "CTRL+MIDDLE CLICK + Drag vertically: Zoom\n\n"
+            "CTRL+MIDDLE CLICK + Drag vertically: Zoom\n"
+            "SHIFT+MIDDLE CLICK + Drag vertically: Change brush size\n\n"
             "LEFT CLICK: Paint FG\n"
             "RIGHT CLICK: Paint BG\n"
             "CTRL+LEFT CLICK: Paint 'maybe FG'\n"
@@ -86,7 +87,7 @@ class GrabCut {
     } image_type;
 
     // Brush radius
-    int radius = 5;
+    int radius = 6;
 
     // Current iteration
     int iterCount;
@@ -153,14 +154,12 @@ void GrabCut::updateVis() {
             }
         }
     }
-    float scale = std::min((float)size.width / visual.cols,
-                           (float)size.height / visual.rows);
+    float scale = std::min(size.width / visual.cols, size.height / visual.rows);
     resize(visual, visual, cv::Size(0, 0), scale, scale, INTER_NEAREST);
 }
 
 void GrabCut::showVis() const {
-    float scale = std::min((float)size.width / visual.cols,
-                           (float)size.height / visual.rows);
+    float scale = std::min(size.width / view.width, size.height / view.height);
     cv::Mat tmp = visual.clone();
     cv::circle(tmp, mousePos, radius * scale, cv::Scalar(0, 255, 0), 1);
     imshow(CV_WIN_NAME, tmp);
@@ -188,6 +187,32 @@ void GrabCut::paintBrushstroke(Point p_screen, bool isPr, bool erasing) {
 }
 
 void GrabCut::mouseEvent(int event, int x, int y, int flags, void*) {
+    auto transformView = [&](float rate = 1.f, int dx = 0, int dy = 0) {
+        float scale = std::min((float)size.width / view.width,
+                               (float)size.height / view.height);
+        if (rate != 1.f) {
+            view.x += view.width * (1. - rate) * ((float)x / mask.cols);
+            view.y += view.height * (1. - rate) * (1. - (float)y / mask.rows);
+            view.width *= rate;
+            view.height *= rate;
+            // Auto resize to fit window
+            float aspect = (float)size.height / size.width;
+            if ((float)view.height / view.width < aspect - 1e-12) {
+                view.y -= (view.width * aspect - view.height) * 0.5f;
+                view.height = view.width * aspect;
+            } else if ((float)view.height / view.width > aspect + 1e-12) {
+                view.x -= (view.height / aspect - view.width) * 0.5f;
+                view.width = view.height / aspect;
+            }
+        }
+        view.x -= dx;
+        view.y -= dy;
+        view.width = std::min<float>(std::max(0.f, view.width), mask.cols);
+        view.height = std::min<float>(std::max(0.f, view.height), mask.rows);
+        view.x = std::min(std::max(0.f, view.x), mask.cols - view.width);
+        view.y = std::min(std::max(0.f, view.y), mask.rows - view.height);
+        updateVis();
+    };
     switch (event) {
         case EVENT_LBUTTONDOWN:
             paintingFG = true;
@@ -216,42 +241,26 @@ void GrabCut::mouseEvent(int event, int x, int y, int flags, void*) {
                                  flags & EVENT_FLAG_SHIFTKEY);
                 updateVis();
             } else if (draggingView) {
-                float scale = std::min((float)size.width / view.width,
-                                       (float)size.height / view.height);
-                int dx = (int)round((x - mousePos.x) / scale);
-                int dy = (int)round((y - mousePos.y) / scale);
                 if (flags & EVENT_FLAG_CTRLKEY) {
-                    float rate =
-                        dy < 0 ? VIEW_ZOOM_SPEED : 1.f / VIEW_ZOOM_SPEED;
-                    view.x += view.width * (1. - rate) * ((float)x / mask.cols);
-                    view.y +=
-                        view.height * (1. - rate) * (1. - (float)y / mask.rows);
-                    view.width *= rate;
-                    view.height *= rate;
-                    float aspect = (float)size.height / size.width;
-                    // Auto resize to fit window
-                    if ((float)view.height / view.width < aspect - 1e-12) {
-                        view.y -= (view.width * aspect - view.height) * 0.5f;
-                        view.height = view.width * aspect;
-                    } else if ((float)view.height / view.width >
-                               aspect + 1e-12) {
-                        view.x -= (view.height / aspect - view.width) * 0.5f;
-                        view.width = view.height / aspect;
-                    }
+                    float rate = y < mousePos.y ? VIEW_ZOOM_SPEED
+                                                : 1.f / VIEW_ZOOM_SPEED;
+                    transformView(rate);
+                } else if (flags & EVENT_FLAG_SHIFTKEY) {
+                    radius += (int)((mousePos.y - y) / 2.f);
+                    radius = std::max(1, radius);
                 } else {
-                    view.x -= dx;
-                    view.y -= dy;
+                    float scale = std::min((float)size.width / view.width,
+                                           (float)size.height / view.height);
+                    int dx = (int)round((x - mousePos.x) / scale);
+                    int dy = (int)round((y - mousePos.y) / scale);
+                    transformView(1.f, dx, dy);
                 }
-                view.width =
-                    std::min<float>(std::max(0.f, view.width), mask.cols);
-                view.height =
-                    std::min<float>(std::max(0.f, view.height), mask.rows);
-                view.x =
-                    std::min(std::max(0.f, view.x), mask.cols - view.width);
-                view.y =
-                    std::min(std::max(0.f, view.y), mask.rows - view.height);
-                updateVis();
             }
+            break;
+        case EVENT_MOUSEWHEEL:
+            float delta = getMouseWheelDelta(flags);
+            float rate = delta < 0 ? VIEW_ZOOM_SPEED : 1.f / VIEW_ZOOM_SPEED;
+            transformView(rate);
             break;
     }
     mousePos.x = x;
