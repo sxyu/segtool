@@ -4,6 +4,7 @@
 #include <opencv2/highgui.hpp>
 #include <iostream>
 #include <string>
+#include <fstream>
 
 namespace {
 using namespace std;
@@ -292,6 +293,7 @@ void runGrabCut(cv::Mat im, cv::Mat mask, const std::string& save_path,
                 const std::string& save_path_gc) {
     app.setImage(im, mask.clone());
     app.updateVis();
+    app.showVis();
     while (true) {
         char c = cv::waitKey(0);
         if (c >= 'A' && c <= 'Z') c = std::tolower(c);
@@ -394,7 +396,10 @@ int main(int argc, char** argv) {
         }
 
         // Backup
-        cv::imwrite(path_no_ext + "_mask_orig.png", mask);
+        auto backup_path = path_no_ext + "_mask_orig.png";
+        if (!std::ifstream(backup_path)) {
+            cv::imwrite(backup_path, mask);
+        }
         runGrabCut(im, mask, mask_path, mask_gc_path);
     }
 
