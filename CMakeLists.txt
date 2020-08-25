@@ -23,3 +23,4 @@ include_directories (
 
 add_executable(segtool main.cpp)
 target_link_libraries( segtool ${OpenCV_LIBS} )
+install(TARGETS segtool DESTINATION bin)

@@ -321,9 +321,9 @@ void runGrabCut(cv::Mat im, cv::Mat mask, const std::string& save_path,
                 app.updateVis();
                 break;
             case 's':
-                std::cout << "Saving..\n";
                 cv::imwrite(save_path_gc, app.getMask());
                 cv::imwrite(save_path, app.getMaskBinary());
+                std::cout << "Saved to " << save_path << "\n";
                 break;
             case '=':
                 app.radius++;
