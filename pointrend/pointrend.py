@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import tqdm
 
 ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 POINTREND_ROOT_PATH = os.path.join(ROOT_PATH, 'detectron2', 'projects',
@@ -97,7 +98,7 @@ if __name__ == '__main__':
         sys.exit(1)
     COCO_CLASS_HUMAN = 0
     pointrend = PointRendWrapper(COCO_CLASS_HUMAN)
-    for image_path in sys.argv[1:]:
+    for image_path in tqdm.tqdm(sys.argv[1:]):
         im = cv2.imread(image_path)
         masks = pointrend.segment(im)
         if len(masks) == 0:
