@@ -31,6 +31,7 @@ const int MORPH_SZ = 15;
 void help() {
     cout << "\nGrabCut segmentation GUI (c) Alex Yu 2020\n"
             "Usage: segtool <image_name>\n\nGUI controls:\n"
+            "ESC: quit\n\n"
             "Space: run GrabCut iteration\n"
             "S: Save mask to overwrite original mask *_mask.png, and outputs "
             "the GrabCut state *_mask_gc.png to allow resume (original "
@@ -63,7 +64,11 @@ class GrabCut {
     void clear();
     // Set the image
     void setImage(Mat _image, Mat _mask);
-    void showImage() const;
+    // Update visualization
+    void updateVis();
+    // Show visualization
+    void showVis() const;
+    // Handle mouse event
     void mouseEvent(int event, int x, int y, int flags, void* param);
 
     // Grabcut iteration
@@ -93,17 +98,20 @@ class GrabCut {
     Size2f size = cv::Size2f(1280, 720);
 
    private:
-    void setLblsInMask(Point p, bool isPr);
+    void paintBrushstroke(Point p, bool isPr, bool erasing);
     // Image and mask
     Mat image, mask;
     // Dynamic mask brushstrokes to be applied to mask; 255=no change
     Mat brushstrokes;
     // Internal grabcut model
     Mat bgdModel, fgdModel;
+    // Visualization
+    Mat visual;
     // Mouse drag flags
-    bool paintingFG = false, paintingBG = false, draggingView = false,
-         erasing = false;
-    cv::Point dragStart;
+    bool paintingFG = false, paintingBG = false, draggingView = false;
+
+    // Mouse position
+    cv::Point mousePos;
 };
 
 void GrabCut::clear() {
@@ -119,41 +127,46 @@ void GrabCut::setImage(Mat _image, Mat _mask) {
     iterCount = 0;
     grabCut(image, mask, cv::Rect(), bgdModel, fgdModel, 1, GC_INIT_WITH_MASK);
 }
-void GrabCut::showImage() const {
+void GrabCut::updateVis() {
     if (image.empty() || mask.empty()) return;
 
-    Mat res;
     if (image_type == ImageType::IMAGE) {
-        res = image(view).clone();
+        visual = image(view).clone();
     } else if (image_type == ImageType::MASK) {
-        res = (mask(view).clone() & 1) * 255;
-        cvtColor(res, res, cv::COLOR_GRAY2BGR);
+        visual = (mask(view).clone() & 1) * 255;
+        cvtColor(visual, visual, cv::COLOR_GRAY2BGR);
     } else {
         Mat im_crop = image(view);
-        im_crop.copyTo(res, mask(view) & 1);
+        im_crop.copyTo(visual, mask(view) & 1);
         if (image_type == ImageType::BLEND) {
-            res = res / 4 * 3 + im_crop / 4;
+            visual = visual / 4 * 3 + im_crop / 4;
         }
     }
     const thread_local cv::Vec3b colors[4] = {BLUE, RED, LIGHTBLUE, PINK};
-    for (int r = 0; r < res.rows; ++r) {
-        auto* resPtr = res.ptr<cv::Vec3b>(r);
+    for (int r = 0; r < visual.rows; ++r) {
+        auto* resPtr = visual.ptr<cv::Vec3b>(r);
         const auto* brushPtr = brushstrokes.ptr<uint8_t>(r + (int)view.y);
-        for (int c = 0; c < res.cols; ++c) {
+        for (int c = 0; c < visual.cols; ++c) {
             int cc = c + (int)view.x;
             if (brushPtr[cc] != 255) {
                 resPtr[c] = colors[brushPtr[cc]] * 0.5 + resPtr[c] * 0.5;
             }
         }
     }
-    float scale =
-        std::min((float)size.width / res.cols, (float)size.height / res.rows);
-    resize(res, res, cv::Size(0, 0), scale, scale, INTER_NEAREST);
-
-    imshow(CV_WIN_NAME, res);
+    float scale = std::min((float)size.width / visual.cols,
+                           (float)size.height / visual.rows);
+    resize(visual, visual, cv::Size(0, 0), scale, scale, INTER_NEAREST);
 }
 
-void GrabCut::setLblsInMask(Point p_screen, bool isPr) {
+void GrabCut::showVis() const {
+    float scale = std::min((float)size.width / visual.cols,
+                           (float)size.height / visual.rows);
+    cv::Mat tmp = visual.clone();
+    cv::circle(tmp, mousePos, radius * scale, cv::Scalar(0, 255, 0), 1);
+    imshow(CV_WIN_NAME, tmp);
+}
+
+void GrabCut::paintBrushstroke(Point p_screen, bool isPr, bool erasing) {
     float scale = std::min(size.width / view.width, size.height / view.height);
     Point p((int)(p_screen.x / scale + view.x),
             (int)(p_screen.y / scale + view.y));
@@ -178,22 +191,19 @@ void GrabCut::mouseEvent(int event, int x, int y, int flags, void*) {
     switch (event) {
         case EVENT_LBUTTONDOWN:
             paintingFG = true;
-            if (flags & EVENT_FLAG_SHIFTKEY) erasing = true;
             break;
         case EVENT_RBUTTONDOWN:
             paintingBG = true;
-            if (flags & EVENT_FLAG_SHIFTKEY) erasing = true;
             break;
         case EVENT_MBUTTONDOWN:
             draggingView = true;
-            dragStart.x = x;
-            dragStart.y = y;
             break;
         case EVENT_LBUTTONUP:
         case EVENT_RBUTTONUP:
-            setLblsInMask(Point(x, y), flags & EVENT_FLAG_CTRLKEY);
+            paintBrushstroke(Point(x, y), flags & EVENT_FLAG_CTRLKEY,
+                             flags & EVENT_FLAG_SHIFTKEY);
             paintingFG = paintingBG = false;
-            showImage();
+            updateVis();
             break;
         case EVENT_MBUTTONUP:
             if (draggingView) {
@@ -202,13 +212,14 @@ void GrabCut::mouseEvent(int event, int x, int y, int flags, void*) {
             break;
         case EVENT_MOUSEMOVE:
             if (paintingFG || paintingBG) {
-                setLblsInMask(Point(x, y), flags & EVENT_FLAG_CTRLKEY);
-                showImage();
+                paintBrushstroke(Point(x, y), flags & EVENT_FLAG_CTRLKEY,
+                                 flags & EVENT_FLAG_SHIFTKEY);
+                updateVis();
             } else if (draggingView) {
                 float scale = std::min((float)size.width / view.width,
                                        (float)size.height / view.height);
-                int dx = (int)round((x - dragStart.x) / scale);
-                int dy = (int)round((y - dragStart.y) / scale);
+                int dx = (int)round((x - mousePos.x) / scale);
+                int dy = (int)round((y - mousePos.y) / scale);
                 if (flags & EVENT_FLAG_CTRLKEY) {
                     float rate =
                         dy < 0 ? VIEW_ZOOM_SPEED : 1.f / VIEW_ZOOM_SPEED;
@@ -239,20 +250,20 @@ void GrabCut::mouseEvent(int event, int x, int y, int flags, void*) {
                     std::min(std::max(0.f, view.x), mask.cols - view.width);
                 view.y =
                     std::min(std::max(0.f, view.y), mask.rows - view.height);
-                dragStart.x = x;
-                dragStart.y = y;
-                showImage();
+                updateVis();
             }
             break;
     }
+    mousePos.x = x;
+    mousePos.y = y;
+    showVis();
 }
 void GrabCut::nextIter() {
     for (int r = 0; r < mask.rows; ++r) {
         auto* maskPtr = mask.ptr<uint8_t>(r);
-        const auto* brushPtr = brushstrokes.ptr<uint8_t>(r + (int)view.y);
+        const auto* brushPtr = brushstrokes.ptr<uint8_t>(r);
         for (int c = 0; c < mask.cols; ++c) {
-            int cc = c + (int)view.x;
-            if (brushPtr[cc] != 255) {
+            if (brushPtr[c] != 255) {
                 maskPtr[c] = brushPtr[c];
             }
         }
@@ -264,14 +275,14 @@ void GrabCut::nextIter() {
 }
 GrabCut app;
 
-void on_mouse(int event, int x, int y, int flags, void* param) {
+void onMouse(int event, int x, int y, int flags, void* param) {
     app.mouseEvent(event, x, y, flags, param);
 }
 
-void run_grabcut(cv::Mat im, cv::Mat mask, const std::string& save_path,
-                 const std::string& save_path_gc) {
+void runGrabCut(cv::Mat im, cv::Mat mask, const std::string& save_path,
+                const std::string& save_path_gc) {
     app.setImage(im, mask.clone());
-    app.showImage();
+    app.updateVis();
     while (true) {
         char c = cv::waitKey(0);
         if (c >= 'A' && c <= 'Z') c = std::tolower(c);
@@ -286,19 +297,19 @@ void run_grabcut(cv::Mat im, cv::Mat mask, const std::string& save_path,
             case '3':
             case '4':
                 app.image_type = GrabCut::ImageType(c - '1');
-                app.showImage();
+                app.updateVis();
                 break;
             case 'r':
                 app.setImage(im, mask.clone());
-                app.showImage();
+                app.updateVis();
                 break;
             case 'c':
                 app.view = cv::Rect2f(0, 0, mask.cols, mask.rows);
-                app.showImage();
+                app.updateVis();
                 break;
             case 'u':
                 app.clear();
-                app.showImage();
+                app.updateVis();
                 break;
             case 's':
                 std::cout << "Saving..\n";
@@ -313,17 +324,18 @@ void run_grabcut(cv::Mat im, cv::Mat mask, const std::string& save_path,
                 break;
             case ' ': {
                 app.nextIter();
-                app.showImage();
+                app.updateVis();
                 cout << "Update: iter " << app.iterCount << endl;
             }
         }
+        app.showVis();
     }
 }
 }  // namespace
 
 int main(int argc, char** argv) {
     namedWindow(CV_WIN_NAME, WINDOW_AUTOSIZE);
-    setMouseCallback(CV_WIN_NAME, on_mouse, 0);
+    setMouseCallback(CV_WIN_NAME, onMouse, 0);
     help();
 
     for (int i = 1; i < argc; ++i) {
@@ -374,7 +386,7 @@ int main(int argc, char** argv) {
 
         // Backup
         cv::imwrite(path_no_ext + "_mask_orig.png", mask);
-        run_grabcut(im, mask, mask_path, mask_gc_path);
+        runGrabCut(im, mask, mask_path, mask_gc_path);
     }
 
     cv::destroyAllWindows();
