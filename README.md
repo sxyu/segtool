@@ -14,7 +14,7 @@
           (used if editing same image again after closing)
     - Press `ESC` to exit
 
-<img src="https://github.com/sxyu/segtool/blob/master/readme-img/grabcut-short.gif"
+<img src="https://www.ocf.berkeley.edu/~sxyu/doriath/imghost/grabcut2-short.gif"
     width="400">
 
 ### Install
