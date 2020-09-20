@@ -1,9 +1,23 @@
 ## GrabCut GUI tool
+**NEW**: Includes a single-human high-quality segmentation model in `humanseg/`
+
 - A simple OpenCV interactive GrabCut GUI, partly adapted from
  https://docs.opencv.org/3.4/d8/d34/samples_2cpp_2grabcut_8cpp-example.html
 - Usage `segtool <image_path>`
     - Expects a mask `<image_path>_mask.png` (1-channel grayscale image, 0 = background, 255 = foreground)
-        - You can obtain this using e.g. included PointRend (see `pointrend` folder)
+        - You can obtain this using included segmentation model, which should give good results if most of the person is visible
+            - Single image: `python infer.py image_file`
+            - Optionally, use OpenPose cropping `python infer.py image_file openpose_body25_keypoints.json`
+            - Use this model elsewhere
+              ```python
+              from human_seg import HumanSegNet
+              net = HumanSegNet().cuda()
+              net(image)
+              ```
+              Where image should be `(B, C, H, W)` RGB. Network was trained with 512x512 images.
+              You can use the helper `human_seg.load_with_openpose(path, json_path)`
+              to crop and scale the image with openpose.
+        - Alternatively, use included PointRend (see `pointrend` folder)
     - Repeat:
         - Left click to paint foreground and right click to paint BG; shift+click to erase brushstroke
         - After doing some painting, press space to run GrabCut and update the mask
